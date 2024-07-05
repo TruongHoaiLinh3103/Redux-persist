@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redux-persist</title>
+    <link href="./css/main.css" rel="stylesheet" />
+</head>
+<body>
+    <h1 id="redux-persist">Redux Persist</h1>
+    <p>Persist and rehydrate a redux store.</p>
+    <h2 id="quickstart">Quickstart</h2>
+    <pre class="box-x"><code>npm install redux-persist</code></pre>
+    <p>Usage Examples:</p>
+    <ol>
+       <li><a href="#basic-usage">Basic Usage</a></li>
+       <li><a href="#nested-persists">Nested Persists</a></li>
+    </ol>
+    <h4 id="basic-usage">Basic Usage</h4>
+    <p>Basic usage involves adding <code>persistReducer</code> and <code>persistStore</code> to your setup. <strong>IMPORTANT</strong> Every app needs to decide how many levels of state they want to &quot;merge&quot;. The default is 1 level. Please read through the <a href="#state-reconciler">state reconciler docs</a> for more information.</p>
+    <pre class="box-x"><code class="language-js">// configureStore.js
+    
+import { createStore } from &#39;redux&#39;
+import { persistStore, persistReducer } from &#39;redux-persist&#39;
+import storage from &#39;redux-persist/lib/storage&#39; // defaults to localStorage for web
+
+import rootReducer from &#39;./reducers&#39;
+
+const persistConfig = {
+    key: &#39;root&#39;,
+    storage,
+}
+
+const persistedReducer = persistReducer(persistConfig, rootReducer)
+
+export default () =&gt; {
+    let store = createStore(persistedReducer)
+    let persistor = persistStore(store)
+    return { store, persistor }
+}
+    </code></pre>
+    <p>If you are using react, wrap your root component with PersistGate. This delays the rendering of your app&#39;s UI until your persisted state has been retrieved and saved to redux. <strong>NOTE</strong> the <code>PersistGate</code> loading prop can be null, or any react instance, e.g. <code>loading={&lt;Loading /&gt;}</code></p>
+    <pre class="box-x"><code class="language-js">import { PersistGate } from &#39;redux-persist/integration/react&#39;
+    
+// ... normal setup, create store and persistor, import components etc.
+
+const App = () =&gt; {
+    return (
+    &lt;Provider store={store}&gt;
+        &lt;PersistGate loading={null} persistor={persistor}&gt;
+        &lt;RootComponent /&gt;
+        &lt;/PersistGate&gt;
+    &lt;/Provider&gt;
+    );
+};
+    </code></pre>
+    <h2 id="api">API</h2>
+    <h4 id="persistreducerconfig-reducer"><code>persistReducer(config, reducer)</code></h4>
+    <ul>
+       <li>
+          arguments
+          <ul>
+             <li>
+                <strong>config</strong> <em>object</em>
+                <ul>
+                   <li>required config: <code>key, storage</code></li>
+                   <li>notable other config: <code>whitelist, blacklist, version, stateReconciler, debug</code></li>
+                </ul>
+             </li>
+             <li>
+                <strong>reducer</strong> <em>function</em>
+                <ul>
+                   <li>any reducer will work, typically this would be the top level reducer returned by <code>combineReducers</code></li>
+                </ul>
+             </li>
+          </ul>
+       </li>
+       <li>returns an enhanced reducer</li>
+    </ul>
+    <h4 id="persiststorestore-config-callback"><code>persistStore(store, [config, callback])</code></h4>
+    <ul>
+       <li>
+          arguments
+          <ul>
+             <li><strong>store</strong> <em>redux store</em> The store to be persisted.</li>
+             <li>
+                <strong>config</strong> <em>object</em> (typically null)
+                <ul>
+                   <li>If you want to avoid that the persistence starts immediately after calling <code>persistStore</code>, set the option manualPersist. Example: <code>{ manualPersist: true }</code> Persistence can then be started at any point with <code>peristor.persist()</code>. You usually want to do this if your storage is not ready when the <code>persistStore</code> call is made.</li>
+                </ul>
+             </li>
+             <li><strong>callback</strong> <em>function</em> will be called after rehydration is finished.</li>
+          </ul>
+       </li>
+       <li>returns <strong>persistor</strong> object</li>
+    </ul>
+    <h4 id="persistor-object"><code>persistor object</code></h4>
+    <ul>
+       <li>
+          the persistor object is returned by persistStore with the following methods:
+          <ul>
+             <li>
+                <code>.purge()</code>
+                <ul>
+                   <li>purges state from disk and returns a promise</li>
+                </ul>
+             </li>
+             <li>
+                <code>.flush()</code>
+                <ul>
+                   <li>immediately writes all pending state to disk and returns a promise</li>
+                </ul>
+             </li>
+             <li>
+                <code>.pause()</code>
+                <ul>
+                   <li>pauses persistence</li>
+                </ul>
+             </li>
+             <li>
+                <code>.persist()</code>
+                <ul>
+                   <li>resumes persistence</li>
+                </ul>
+             </li>
+          </ul>
+       </li>
+    </ul>
+    <h2 id="state-reconciler">State Reconciler</h2>
+    <p>State reconcilers define how incoming state is merged in with initial state. It is critical to choose the right state reconciler for your state. There are three options that ship out of the box, let&#39;s look at how each operates:</p>
+    <ol>
+       <li>
+          <strong>hardSet</strong> (<code>import hardSet from &#39;redux-persist/lib/stateReconciler/hardSet&#39;</code>)
+          This will hard set incoming state. This can be desirable in some cases where persistReducer is nested deeper in your reducer tree, or if you do not rely on initialState in your reducer.
+          <ul>
+             <li><strong>incoming state</strong>: <code>{ foo: incomingFoo }</code></li>
+             <li><strong>initial state</strong>: <code>{ foo: initialFoo, bar: initialBar }</code></li>
+             <li><strong>reconciled state</strong>: <code>{ foo: incomingFoo }</code> // note bar has been dropped</li>
+          </ul>
+       </li>
+       <li>
+          <strong>autoMergeLevel1</strong> (default)
+          This will auto merge one level deep. Auto merge means if the some piece of substate was modified by your reducer during the REHYDRATE action, it will skip this piece of state. Level 1 means it will shallow merge 1 level deep.
+          <ul>
+             <li><strong>incoming state</strong>: <code>{ foo: incomingFoo }</code></li>
+             <li><strong>initial state</strong>: <code>{ foo: initialFoo, bar: initialBar }</code></li>
+             <li><strong>reconciled state</strong>: <code>{ foo: incomingFoo, bar: initialBar }</code> // note incomingFoo overwrites initialFoo</li>
+          </ul>
+       </li>
+       <li>
+          <strong>autoMergeLevel2</strong> (<code>import autoMergeLevel2 from &#39;redux-persist/lib/stateReconciler/autoMergeLevel2&#39;</code>)
+          This acts just like autoMergeLevel1, except it shallow merges two levels
+          <ul>
+             <li><strong>incoming state</strong>: <code>{ foo: incomingFoo }</code></li>
+             <li><strong>initial state</strong>: <code>{ foo: initialFoo, bar: initialBar }</code></li>
+             <li><strong>reconciled state</strong>: <code>{ foo: mergedFoo, bar: initialBar }</code> // note: initialFoo and incomingFoo are shallow merged</li>
+          </ul>
+       </li>
+    </ol>
+    <h4 id="example">Example</h4>
+    <pre class="box-x"><code class="language-js">import hardSet from &#39;redux-persist/lib/stateReconciler/hardSet&#39;
+    
+const persistConfig = {
+    key: &#39;root&#39;,
+    storage,
+    stateReconciler: hardSet,
+}
+    </code></pre>
+    <h2 id="react-integration">React Integration</h2>
+    <p>Redux persist ships with react integration as a convenience. The <code>PersistGate</code> component is the recommended way to delay rendering until persistence is complete. It works in one of two modes:</p>
+    <ol>
+       <li><code>loading</code> prop: The provided loading value will be rendered until persistence is complete at which point children will be rendered.</li>
+       <li>function children: The function will be invoked with a single <code>bootstrapped</code> argument. When bootstrapped is true, persistence is complete and it is safe to render the full app. This can be useful for adding transition animations.</li>
+    </ol>
+    <h2 id="blacklist--whitelist">Blacklist &amp; Whitelist</h2>
+    <p>By Example:</p>
+    <pre class="box-x"><code class="language-js">// BLACKLIST
+const persistConfig = {
+    key: &#39;root&#39;,
+    storage: storage,
+    blacklist: [&#39;navigation&#39;] // navigation will not be persisted
+};
+
+// WHITELIST
+const persistConfig = {
+    key: &#39;root&#39;,
+    storage: storage,
+    whitelist: [&#39;navigation&#39;] // only navigation will be persisted
+};
+    </code></pre>
+    <h2 id="nested-persists">Nested Persists</h2>
+    <p>Nested persist can be useful for including different storage adapters, code splitting, or deep filtering. For example while blacklist and whitelist only work one level deep, but we can use a nested persist to blacklist a deeper value:</p>
+    <pre class="box-x"><code class="language-js">import { combineReducers } from &#39;redux&#39;
+import { persistReducer } from &#39;redux-persist&#39;
+import storage from &#39;redux-persist/lib/storage&#39;
+
+import { authReducer, otherReducer } from &#39;./reducers&#39;
+
+const rootPersistConfig = {
+    key: &#39;root&#39;,
+    storage: storage,
+    blacklist: [&#39;auth&#39;]
+}
+
+const authPersistConfig = {
+    key: &#39;auth&#39;,
+    storage: storage,
+    blacklist: [&#39;somethingTemporary&#39;]
+}
+
+const rootReducer = combineReducers({
+    auth: persistReducer(authPersistConfig, authReducer),
+    other: otherReducer,
+})
+
+export default persistReducer(rootPersistConfig, rootReducer)
+    </code></pre>
+    <h2 id="migrations">Migrations</h2>
+    <p><code>persistReducer</code> has a general purpose &quot;migrate&quot; config which will be called after getting stored state but before actually reconciling with the reducer. It can be any function which takes state as an argument and returns a promise to return a new state object.</p>
+    <p>Redux Persist ships with <code>createMigrate</code>, which helps create a synchronous migration for moving from any version of stored state to the current state version. <a href="./docs/migrations.md">[Additional information]</a></p>
+    <h2 id="transforms">Transforms</h2>
+    <p>Transforms allow you to customize the state object that gets persisted and rehydrated.</p>
+    <p>There are several libraries that tackle some of the common implementations for transforms.</p>
+    <ul>
+       <li><a href="https://github.com/rt2zz/redux-persist-transform-immutable">immutable</a> - support immutable reducers</li>
+       <li><a href="https://github.com/hilkeheremans/redux-persist-seamless-immutable">seamless-immutable</a> - support seamless-immutable reducers</li>
+       <li><a href="https://github.com/rt2zz/redux-persist-transform-compress">compress</a> - compress your serialized state with lz-string</li>
+       <li><a href="https://github.com/maxdeviant/redux-persist-transform-encrypt">encrypt</a> - encrypt your serialized state with AES</li>
+       <li><a href="https://github.com/edy/redux-persist-transform-filter">filter</a> - store or load a subset of your state</li>
+       <li><a href="https://github.com/actra-development/redux-persist-transform-filter-immutable">filter-immutable</a> - store or load a subset of your state with support for immutablejs</li>
+       <li><a href="https://github.com/gabceb/redux-persist-transform-expire">expire</a> - expire a specific subset of your state based on a property</li>
+       <li><a href="https://github.com/kamranahmedse/redux-persist-expire">expire-reducer</a> - more flexible alternative to expire transformer above with more options</li>
+    </ul>
+    <p>When the state object gets persisted, it first gets serialized with <code>JSON.stringify()</code>. If parts of your state object are not mappable to JSON objects, the serialization process may transform these parts of your state in unexpected ways. For example, the javascript <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set">Set</a> type does not exist in JSON. When you try to serialize a Set via <code>JSON.stringify()</code>, it gets converted to an empty object. Probably not what you want.</p>
+    <p>Below is a Transform that successfully persists a Set property, which simply converts it to an array and back. In this way, the Set gets converted to an Array, which is a recognized data structure in JSON. When pulled out of the persisted store, the array gets converted back to a Set before being saved to the redux store.</p>
+    <pre class="box-x"><code class="language-js">import { createTransform } from &#39;redux-persist&#39;;
+    
+const SetTransform = createTransform(
+    // transform state on its way to being serialized and persisted.
+    (inboundState, key) =&gt; {
+    // convert mySet to an Array.
+    return { ...inboundState, mySet: [...inboundState.mySet] };
+    },
+    // transform state being rehydrated
+    (outboundState, key) =&gt; {
+    // convert mySet back to a Set.
+    return { ...outboundState, mySet: new Set(outboundState.mySet) };
+    },
+    // define which reducers this transform gets called for.
+    { whitelist: [&#39;someReducer&#39;] }
+);
+
+export default SetTransform;
+    </code></pre>
+    <p>The <code>createTransform</code> function takes three parameters.</p>
+    <ol>
+       <li>An &quot;inbound&quot; function that gets called right before state is persisted (optional).</li>
+       <li>An &quot;outbound&quot; function that gets called right before state is rehydrated (optional).</li>
+       <li>A config object that determines which keys in your state will be transformed (by default no keys are transformed).</li>
+    </ol>
+    <p>In order to take effect transforms need to be added to a <code>PersistReducer</code>’s config object.</p>
+    <pre class="box-x"><code>import storage from &#39;redux-persist/lib/storage&#39;;
+import { SetTransform } from &#39;./transforms&#39;;
+
+const persistConfig = {
+    key: &#39;root&#39;,
+    storage: storage,
+    transforms: [SetTransform]
+};
+    </code></pre>
+    <h2 id="storage-engines">Storage Engines</h2>
+    <ul>
+       <li><strong>localStorage</strong> <code>import storage from &#39;redux-persist/lib/storage&#39;</code></li>
+       <li><strong>sessionStorage</strong> <code>import storageSession from &#39;redux-persist/lib/storage/session&#39;</code></li>
+       <li><strong>AsyncStorage</strong> react-native <code>import AsyncStorage from &#39;@react-native-community/async-storage&#39;</code></li>
+       <li><strong><a href="https://github.com/mozilla/localForage">localForage</a></strong> recommended for web</li>
+       <li><strong><a href="https://github.com/psperber/redux-persist-electron-storage">electron storage</a></strong> Electron support via <a href="https://github.com/sindresorhus/electron-store">electron store</a></li>
+       <li><strong><a href="https://github.com/robwalkerco/redux-persist-filesystem-storage">redux-persist-filesystem-storage</a></strong> react-native, to mitigate storage size limitations in android (<a href="https://github.com/rt2zz/redux-persist/issues/199">#199</a>, <a href="https://github.com/rt2zz/redux-persist/issues/284">#284</a>)</li>
+       <li><strong><a href="https://github.com/pellejacobs/redux-persist-node-storage">redux-persist-node-storage</a></strong> for use in nodejs environments.</li>
+       <li><strong><a href="https://github.com/CodingZeal/redux-persist-sensitive-storage">redux-persist-sensitive-storage</a></strong> react-native, for sensitive information (uses <a href="https://github.com/mCodex/react-native-sensitive-info">react-native-sensitive-info</a>).</li>
+       <li><strong><a href="https://github.com/t73liu/redux-persist-expo-filesystem">redux-persist-expo-filesystem</a></strong> react-native, similar to redux-persist-filesystem-storage but does not require linking or ejecting CRNA/Expo app. Only available if using Expo SDK (Expo, create-react-native-app, standalone).</li>
+       <li><strong><a href="https://github.com/Cretezy/redux-persist-expo-securestore">redux-persist-expo-securestore</a></strong> react-native, for sensitive information using Expo&#39;s SecureStore. Only available if using Expo SDK (Expo, create-react-native-app, standalone).</li>
+       <li><strong><a href="https://github.com/leethree/redux-persist-fs-storage">redux-persist-fs-storage</a></strong> react-native-fs engine</li>
+       <li><strong><a href="https://github.com/abersager/redux-persist-cookie-storage">redux-persist-cookie-storage</a></strong> Cookie storage engine, works in browser and Node.js, for universal / isomorphic apps</li>
+       <li><strong><a href="https://github.com/cuijiemmx/redux-casa/tree/master/packages/redux-persist-weapp-storage">redux-persist-weapp-storage</a></strong> Storage engine for wechat mini program, also compatible with wepy</li>
+       <li><strong><a href="https://github.com/ssorallen/redux-persist-webextension-storage">redux-persist-webextension-storage</a></strong> Storage engine for browser (Chrome, Firefox) web extension storage</li>
+       <li><strong><a href="https://github.com/bankifyio/redux-persist-realm">@bankify/redux-persist-realm</a></strong> Storage engine for Realm database, you will need to install Realm first</li>
+       <li><strong><a href="https://github.com/yanick/redux-persist-pouchdb">redux-persist-pouchdb</a></strong> Storage engine for PouchDB.</li>
+       <li><strong>custom</strong> any conforming storage api implementing the following methods: <code>setItem</code> <code>getItem</code> <code>removeItem</code>. (<strong>NB</strong>: These methods must support promises)</li>
+    </ul>
+</body>
+</html>
